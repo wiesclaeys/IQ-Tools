@@ -5,17 +5,9 @@ Created on Thu Nov 16 16:22:48 2023
 @author: wclaey6
 """
 
-# import os
-# import math
 
-# import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
-
-# import pymirc.fileio as pmf
-# import pymirc.viewer as pv
-
 import numpy as np
-# import scipy as sp
 
 
 def linear(x, a, b):
