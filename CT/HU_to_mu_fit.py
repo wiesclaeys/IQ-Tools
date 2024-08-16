@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Fit a piecewise linear function density-HU data obtained by scanning a phantom containing inserts of varying density.
+Fit a piecewise linear function mu-HU data obtained by scanning a phantom containing inserts of varying density.
 
 
 This script uses the pwlf package (https://pypi.org/project/pwlf/) to handle the fitting.
@@ -11,6 +11,7 @@ There are three possible fitting modes:
     - guess: initial break point positions are specified, the fitting starts from here
     - fixed: break points are fixed from the start
 
+The is read from a file containing the attenuation at different energies.
 
 created on 12/08/2024
 
@@ -31,13 +32,15 @@ from functions import *
 # # User inputs
 # =============================================================================
 # file locations
-data_path = 'C:\\Users\\wclaey6\\Data\\Electron Density\\Intevo\\raw_data\\'    # directory from where the raw data is read
-save_path = 'C:\\Users\\wclaey6\\Data\\Electron Density\\Intevo\\'              # folder where the results directory is created
+data_path = 'C:\\Users\\wclaey6\\Data\\Electron Density\\Intevo\\raw_data\\'         # directory from where the raw data is read (HU)
+data_path2 = 'C:\\Users\\wclaey6\\Data\\Electron Density\\materials_attenuation.csv' # directory from where the mu values are read
+save_path = 'C:\\Users\\wclaey6\\Data\\Electron Density\\Intevo\\'                   # folder where the results directory is created
 
-save_dir = 'results_guess_15_av'                                                   # name of the results directory
+save_dir = 'mu_results_guess_15_av'                                                   # name of the results directory
 
 # fit settings
 num_segments = 2       # Number of linear segments
+energy = 440           # Energy in keV for which to calculate the attenuation 
 
 breaks = [15]          # List of the guessed or knonw break points between the linear segments. If None, the breaks points are determined completely during fitting
 fixed_breaks = False   # If true, the exact positions of the breaks are kept, if False they are optimized during fitting
@@ -75,7 +78,13 @@ else:
     c = input("Press enter to continue")
 
 
+
+    mus.append(attenuation_data.loc[energy, material])
+
 #%% Performing the fit
+
+#initialization
+attenuation_data = pd.read_csv('C:\\Users\\wclaey6\\Data\\Electron Density\\materials_attenuation.csv')
 
 lines = []  # initialize list from where the results file is written
 
@@ -90,9 +99,14 @@ for name in file_names:
     filename = data_path + name + ".csv"    
     data = pd.read_csv(filename)
     
-    densities = data['Density'].values
     HUs = data['Mean'].values
+    
+    # Reading the attenuation data
+    mus = []
     materials = data['Material'].values
+    for material in materials:
+        mus.append(attenuation_data.loc[energy, material])
+    mus = np.array(mus)
     
     # average solid water results (optional)
     if average_solid_water:
@@ -100,12 +114,11 @@ for name in file_names:
         indsC, = np.where(materials != "solid water")
         
         M = np.mean(HUs[inds])
-        
         HUs = np.append(HUs[indsC], M)
-        densities = np.append(densities[indsC], densities[inds[0]])  
+        mus = np.append(mus[indsC], attenuation_data.loc[energy, "solid water"])
     
     # initialize the fitting model
-    model = pwlf.PiecewiseLinFit(HUs, densities)    # use the pwlf library to handle the fitting
+    model = pwlf.PiecewiseLinFit(HUs, mus)    # use the pwlf library to handle the fitting
     
     # perform the fit in the correct mode:
     # free mode mode
@@ -141,11 +154,11 @@ for name in file_names:
         print((breaks_x[i+1], round(breaks_y[i+1], 3)))
         
         # Doing some checks and printing the values
-        rho_air = model.predict(-1000)[0]
-        rho_water = model.predict(0)[0]
+        mu_air = model.predict(-1000)[0]
+        mu_water = model.predict(0)[0]
         print("----- Checks -----")
-        print("Density at -1000 HU (air):", round(rho_air, 2), "g/ml")
-        print("Density at 0 HU (water):", round(rho_water, 2), "g/ml")
+        print("Attenuation at -1000 HU (air):", round(mu_air, 2), "/cm")
+        print("Atenuation at 0 HU (water):", round(mu_water, 2), "/cm")
 
 
     #%% Plotting the results
@@ -154,17 +167,18 @@ for name in file_names:
     y = model.predict(x)
     
     # the raw data
-    plt.plot(HUs, densities, marker = '.', linestyle = 'None', label = 'data')
+    plt.plot(HUs, mus, marker = '.', linestyle = 'None', label = 'data')
     # the fit
     plt.plot(x, y, '-', label = 'fit')
     # lines indicating the line breaks
-    plt.vlines(breaks_x[1:-1], ymin = 0, ymax = 2, color = 'green', linestyle = 'dashed', label = 'breaks')
+    ymax = np.max(y)
+    plt.vlines(breaks_x[1:-1], ymin = 0, ymax = ymax, color = 'green', linestyle = 'dashed', label = 'breaks')
     
     # layout
     plt.xlabel("CT-number (HU)")
-    plt.ylabel("Density (g/ml)")
+    plt.ylabel("Attenuation (/cm)")
     plt.title(name)
-    plt.ylim(0,2)
+    plt.ylim(0,ymax)
     plt.grid(True)
     plt.legend()
     if save == True:    # saving the plot (optional)
@@ -175,11 +189,11 @@ for name in file_names:
     #%% Analyzing the difference between the fit and the data
 
     # calculating
-    dev = densities - model.predict(HUs)            # calculate difference between data and fit
-    max_dev = np.max(np.abs(dev / densities * 100)) # maximum deviation (%)
+    dev = mus - model.predict(HUs)            # calculate difference between data and fit
+    max_dev = np.max(np.abs(dev / mus * 100)) # maximum deviation (%)
     
     # plotting
-    plt.plot(HUs, dev / densities * 100, '.')
+    plt.plot(HUs, dev / mus * 100, '.')
     
     # layout
     plt.grid(True)
@@ -206,8 +220,8 @@ for name in file_names:
     for segm in range(num_segments):
         line.append(slopes[segm])
         line.append(offsets[segm])
-    line.append(rho_air)
-    line.append(rho_water)
+    line.append(mu_air)
+    line.append(mu_water)
     line.append(max_dev)
 
     lines.append(line)
@@ -216,7 +230,7 @@ for name in file_names:
 
 if save == True:
     f = open(new_path + "analysis.csv", "w")
-    header = "name," + "x,y," * (num_segments + 1) + "slope, offset, " * num_segments + "density at -1000 HU (g/ml)," + "density at 0 HU (g/ml)," + "max deviation (%)" 
+    header = "name," + "x,y," * (num_segments + 1) + "slope, offset, " * num_segments + "attenuation at -1000 HU (/cm)," + "attenuation at 0 HU (/cm)," + "max deviation (%)" 
     header = header.strip(",") + "\n"
     f.write(header)
     for line in lines:
