@@ -11,6 +11,10 @@ Analysis of uniform cylinder data.
 4) plot the average angular profile
 5) look at the profiles in some more detail
 
+
+-------
+v2 27/09/2024: bit more advanced version. e.g. calculates gibbs statistics
+
 """
 
 import os
@@ -33,7 +37,7 @@ from IQ_functions import *
 # =============================================================================
 
 path = 'C:\\Users\\wclaey6\\Data\\Noise Generator\\2024-09__Studies\\'
-name = '40'
+name = '01'
 
 
 
@@ -191,10 +195,12 @@ if plot_slices:
 cutoff_radius = 65    # mm
 
 res = 2          # bin width in mm
-r_max = 150        # mm
+r_max = 120        # mm
 
 fit_spline = True       # whether or not to fit a spline
-s = None              # smoothness of the spline (default = None)
+fit_gibbs = True        # whether or not to calculate Gibbs artifact metrics. If true, the cutoff_radius will be updated using this information 
+
+s = 50              # smoothness of the spline (default = None)
 # =============================================================================
 
 # get r bins and edges
@@ -214,8 +220,11 @@ r_profile = sum_hist / point_hist                               # average of the
 
 #plotting radial profile
 plt.plot(r_bin_centers, r_profile, marker = '.', linestyle = 'None', label = 'data')
-plt.vlines(cutoff_radius, 0, 1.05 * np.nanmax(r_profile), color = 'green', label = 'ROI')
+# plt.vlines(cutoff_radius, 0, 1.05 * np.nanmax(r_profile), color = 'green', label = 'ROI')
 plt.vlines(radius, 0, 1.05 * np.nanmax(r_profile), color = 'red', label = 'edge')
+
+
+## investigate Gibbs artifact
 
 
 # fitting smoothing spline to the data
@@ -241,6 +250,22 @@ if fit_spline:
     y = sp.interpolate.splev(a, tck)
     plt.plot(a, y, label = 'spline')
     
+    if fit_gibbs:
+        R0 = cutoff_radius
+        i0 = np.argmin(np.abs(a - R0))
+        M_gibbs = np.max(y[i0:])
+        i_M_gibbs = i0 + np.argmax(y[i0:])
+        m_gibbs = np.min(y[i0:i_M_gibbs])
+        i_m_gibbs = i0 + np.argmin(y[i0:i_M_gibbs])
+        gibbs = (M_gibbs - m_gibbs) / (M_gibbs + m_gibbs) * 100
+        gibbs_width = a[i_M_gibbs] - a[i_m_gibbs]
+        print("Gibbs height =", round(gibbs, 2), "%")
+        print("Gibbs width =", round(gibbs_width, 2), "mm")
+        print("Gibbs max position =", round(a[i_M_gibbs], 2), "mm")
+        plt.vlines([a[i_M_gibbs], a[i_m_gibbs]], 0, 1.05 * np.nanmax(r_profile), color = 'blue', label = 'gibbs')
+        cutoff_radius = a[i_m_gibbs] - gibbs_width
+    plt.vlines(cutoff_radius, 0, 1.05 * np.nanmax(r_profile), color = 'green', label = 'ROI')
+    
     # calculate uniformity metrics
     i_min = math.ceil(10 * np.min(r_bin_centers)) # avoid extrapolation before first datapoint
     i_max = np.argmin(np.abs(a - cutoff_radius))  # avoid PVE
@@ -254,6 +279,9 @@ if fit_spline:
     print("Minimum: ", np.round(m, 2), units, "at", m_loc , " mm")
     print("Deviation = ", round(dev, 2), units)
     print("Deviation = ", round(dev2, 2), "%")
+    
+    plt.vlines(m_loc, 0, 1.05 * np.nanmax(r_profile), color = 'purple', label = 'min', linestyle = 'dotted')
+    plt.vlines(M_loc, 0, 1.05 * np.nanmax(r_profile), color = 'purple', label = 'max', linestyle = 'dashed')
 
 # plot layout
 plt.xlabel("Radius (mm)")
@@ -305,6 +333,7 @@ theta_profile = sum_hist / point_hist                               # average of
 
 # plotting
 plt.plot(theta_bin_centers, theta_profile, label = "data")
+
 
 # fitting smoothing spline to the data
 if fit_spline:   
