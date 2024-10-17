@@ -109,6 +109,8 @@ codecs = [
 
 data = fragment
 
+codec = "iso8859_1"
+
 for codec in codecs:
     try:
         print(f"{codec}, {data.decode(codec)}")

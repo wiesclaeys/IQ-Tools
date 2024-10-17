@@ -13,54 +13,47 @@ import scipy as sp
 import matplotlib.pyplot as plt
 
 from scipy.ndimage import gaussian_filter
-import pydicom as pd
+import pydicom as py
 
-from IQ_functions import *
+# from IQ_functions import *
+from projection_data_functions import *
+from data_reading import *
 
-def theoretical_profile(x, x0, C, mu, R):
-    
-    a = np.where((x-x0)**2 < R**2, C / mu * (1-np.exp(-2*mu*np.sqrt(R**2-(x-x0)**2))), 0)
-    a = np.array(a, dtype = np.float32)
-    # print(len(a))
-    # print(a)
 
-    return a
-
-def theoretical_profile2(x, x0, C, mu, R):
-    a = np.where((x-x0)**2 < R**2, C / mu * (1-np.exp(-2*mu*np.sqrt(R**2-(x-x0)**2))), 0)
-    a = np.array(a, dtype = np.float32)
-    # print(len(a))
-    print(a)
-
-    return a.flatten()
-
-def poisson(x, mu):
-    return mu**x*np.exp(-mu)/sp.special.factorial(x)
 
 # =============================================================================
-# Process the full count data first
-# =============================================================================
-# 
+# Select patient and load data
 # =============================================================================
 
-frame_index = 121
+path = "C:\\Wies Data\\Data for Python"
 
-path = 'C:\\Users\\wclaey6\\Data\\Noise Generator\\QCintevo_WC\\SUV\\PP\\'
-path = 'C:\\Users\\wclaey6\\Data\\Noise Generator\\QCintevo_Tb\\'
-name = '2024-07-03'
-
-dcm_dir     = path + name
-dcm         = pd.dcmread(dcm_dir + "\\" + os.listdir(dcm_dir)[0])
-vol         = dcm.pixel_array 
-
-if name == '100':
-    rescale = 1
-else:
-    field = dcm[0x0040,0x9096][0]
-    rescale = field[0x0040,0x9225].value
-vol = vol * rescale
+patient_name = "QCintevo_Tb"
+patient_ID = "Cilinder"
 
 
+database = create_database(path)
+list_patients(database)
+
+patient = lookup_patient(database, patient_name, patient_ID = patient_ID)
+
+#%% 
+# =============================================================================
+# Select (collection of) series
+# =============================================================================
+
+series_description = "reduced"
+date = None
+
+series = find_series(patient, series_description, date= date)
+dcm_list = load_series(series)
+
+
+#%%
+dcm = dcm_list[2]
+
+# reading the required data
+vol         = get_rescaled_data(dcm)
+frame_index = 0
 frame       = vol[frame_index, :, :]
 
 pixel_size = dcm.PixelSpacing[0]
@@ -81,7 +74,7 @@ ys = (rows - (num_rows - 1) / 2) * pixel_size
 
 xx, yy = np.meshgrid(xs, ys, indexing = 'xy')
 
-#%% Show the selected frame
+# Show an example frame
 
 plt.imshow(frame)
 plt.colorbar()
@@ -160,7 +153,7 @@ ROI = slice(start, stop)
 
 #%% spline fitting to x profile
 
-s = 15000
+s = 20000
 k = 3
 
 
@@ -183,39 +176,40 @@ plt.show()
 
 #%% Compare fitted spline to profiles of reduced frames
 
-names = os.listdir(path)
+fractions = [10,20,30,40,50,60,70,80,90]
 
 # names = ['100']
-for name in names:    
-    p = int(name)
+
+
+
+
+
+# for i in range(len(fractions)):    
+#     p = fractions[i]
     
-    dcm_dir     = path + name
-    dcm         = pd.dcmread(dcm_dir + "\\" + os.listdir(dcm_dir)[0])
-    new_vol         = dcm.pixel_array 
+#     full_path = path + "\\" + selection['path2'].values[i]
+
+#     dcm_dir     = full_path
+#     dcm         = py.dcmread(dcm_dir + "\\" + os.listdir(dcm_dir)[0])
+#     new_vol     = get_rescaled_data(dcm)
+      
+#     new_frame = new_vol[frame_index, :, :]
     
-    if name == '100':
-        rescale = 1
-    else:
-        field = dcm[0x0040,0x9096][0]
-        rescale = field[0x0040,0x9225].value
-    new_vol = new_vol * rescale
-    
-    new_frame = new_vol[frame_index, :, :]
-    
-    new_x_profile = np.sum(new_frame[ROI, :], axis = 0)
-    scaled_spline = spline * p / 100
+#     new_x_profile = np.sum(new_frame[ROI, :], axis = 0)
+#     scaled_spline = spline * p / 10
     
     
-    plt.plot(new_x_profile, label = p)
-    plt.plot(scaled_spline)
-    plt.title("Reduced profile " + str(p) + "%")
-    plt.show()
+#     plt.plot(new_x_profile, label = p)
+#     plt.plot(scaled_spline, label = 'spline')
+#     plt.title("Reduced profile " + str(p) + "%")
+#     plt.legend()
+#     plt.show()
     
-    plt.plot((new_x_profile - scaled_spline) / scaled_spline * 100)
-    plt.title("Deviation " + str(p) + "%" )
-    plt.ylim(-10,10)
-    plt.xlim(75,175)
-    plt.show()
+#     plt.plot((new_x_profile - scaled_spline) / scaled_spline * 100)
+#     plt.title("Deviation " + str(p) + "%" )
+#     plt.ylim(-10,10)
+#     plt.xlim(75,175)
+#     plt.show()
 
 
 #%% segmentation in x direction
@@ -236,17 +230,106 @@ plt.show()
 ROI2 = slice(start, stop)
 
 #%% check for poisson statistics in central region
-M = np.max(vol)
-bins = np.arange(M + 1)
 
-for i in range(10):
+
+# still todo
+
+M = np.max(vol[19,:,:])
+bins = np.arange(M + 2) - 0.5
+xs = bins[:-1]  + 0.5
+
+devs = []
+for i in range(20):
     new_frame = vol[i,:,:]
     CFOV = new_frame[ROI, ROI2]
     
     mu = np.mean(CFOV)
+    var = np.var(CFOV, ddof = 1)
+    
+    devs.append(mu - var)
     
     plt.hist(CFOV.flatten(), bins = bins)
-    plt.plot(bins, poisson(bins, mu = mu) * np.size(CFOV))
+    plt.plot(xs, poisson(xs, mu = mu) * np.size(CFOV))
     plt.title(str(i))
     plt.show()
-    print(i ,": mean=", np.round(mu, 2), "----- std = ", np.round(np.var(CFOV, ddof = 1)))
+    print(i ,": mean=", np.round(mu, 2), "----- var = ", np.round(var,2))
+    
+
+    
+plt.plot(devs, '.')
+plt.title("deviation between variance and mean")
+plt.xlim(0,20)
+plt.xlabel("frame number")
+plt.show()
+
+print("mean deviation =", round(np.mean(devs),4), "=" , round(np.mean(devs)/mu*100, 2), '%')
+
+#%%
+
+sumframe = np.sum(vol[0:1,:,:], axis = 0)
+CFOV = sumframe[ROI, ROI2]
+data = CFOV.flatten()
+
+M = np.max(CFOV)
+bins = np.arange(M + 2) - 0.5
+xs = bins[:-1]  + 0.5
+
+freqs, b = np.histogram(data, bins = bins) 
+
+N = np.size(data)
+mu = np.mean(data)
+
+y = np.log(freqs) + sp.special.gammaln(xs + 1)
+y_fix = np.log(N) - mu + xs * np.log(mu)
+
+res = y - y_fix
+
+variance = ( 1 - poisson(xs, mu)) / ( N * poisson(xs, mu))
+std = np.sqrt(variance)
+
+plt.plot(y, '.')
+plt.plot(y_fix)
+
+
+# plt.xlim(0,len(bins))
+plt.title('Poisson-ness plot')
+plt.show()
+
+
+
+plt.plot(res, '.')
+plt.hlines(0, 0, len(bins), color = 'orange')
+plt.plot(- std, linestyle = "dotted", color = 'red')
+plt.plot(std, linestyle = "dotted", color = 'green')
+plt.plot(- 2*std, linestyle = "dashed", color = 'red')
+plt.plot(2*std, linestyle = "dashed", color = 'green')
+plt.title('deviations')
+plt.ylim(1.1 * np.min(res[np.isfinite(res)]), 1.1 * np.max(res[np.isfinite(res)]))
+plt.xlim(0, bins[-1])
+plt.show()
+
+
+
+
+# try to do some chi2 magic
+
+#expected values
+
+
+# 
+ps = poisson(xs, mu = mu)           # calculated probabilities
+ps = np.append(ps, 1-np.sum(ps))    # add probability of everything bigger
+expected_freqs = ps * N             # get expected frequencies
+
+Os, Es = rebin_data(freqs, expected_freqs) # prepare data for chi-square test
+
+
+t = sp.stats.chisquare(Os, Es)
+
+print("Chisquare =", round(t[0],2), ", p-value =", round(t[1],3))
+
+
+
+
+
+

@@ -3,6 +3,9 @@
 Created on Thu Sep 26 15:58:57 2024
 
 @author: wclaey6
+
+15-10-2024: only addition to v1 is block of code that loops over the different noise levels. not very useful at the moment
+
 """
 
 import os
@@ -13,9 +16,10 @@ import scipy as sp
 import matplotlib.pyplot as plt
 
 from scipy.ndimage import gaussian_filter
-import pydicom as pd
+import pydicom as py
 
 from IQ_functions import *
+from data_reading import *
 
 def theoretical_profile(x, x0, C, mu, R):
     
@@ -43,32 +47,26 @@ def poisson(x, mu):
 # Reading the data and post-smoothing
 # =============================================================================
 
-path = 'C:\\Users\\wclaey6\\Data\\Noise Generator\\QCintevo_WC\\SUV\\PP\\'
-name = '90'
+path = "C:\\Wies Data\\Data for Python"
 
-
-
-# # Other parameters (more parameters can be set in each block of code)
-# units = "suv"         # units of the image data 
-
-# sm_fwhm_mm    = 0       # width of the Gaussian kernel used for post smoothing
-# radius        = 100     # known radius of the cylindrical phantom
+patient_name = "QCintevo_WC"
+patient_ID = "SUV"
+series_description = "Tomo_reduced_0_2"
 
 scale_factor = 1
-# =============================================================================
 
-# # reading data
-
-
-dcm_dir     = path + name
-# dcm         = pmf.DicomVolume(os.path.join(dcm_dir, '*')) # join multiple slices to a single volume
-# vol         = dcm.get_data() 
-# vol         = vol * scale_factor
-
-dcm_dir     = path + name
-dcm         = pd.dcmread(dcm_dir + "\\" + os.listdir(dcm_dir)[0])
+# looking for matching files
+database = create_database(path)
+s = lookup_series(database, series_description, patient_name=patient_name, patient_ID=patient_ID)
 
 
+# loading the first matching file
+full_path = path + "\\" + s['path2'].values[0]
+
+dcm_dir     = full_path
+dcm         = py.dcmread(dcm_dir + "\\" + os.listdir(dcm_dir)[0])
+
+#getting the relevant data
 vol         = dcm.pixel_array 
 vol         = vol * scale_factor
 
@@ -193,6 +191,8 @@ plt.show()
 
 
 #%%
+
+# only new block of code, does not work with new datastructure/way of file reading
 
 
 names = os.listdir(path)

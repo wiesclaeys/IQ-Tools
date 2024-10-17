@@ -13,9 +13,11 @@ import scipy as sp
 import matplotlib.pyplot as plt
 
 from scipy.ndimage import gaussian_filter
-import pydicom as pd
+import pydicom as py
 
 from IQ_functions import *
+from data_reading import *
+
 
 def theoretical_profile(x, x0, C, mu, R):
     
@@ -43,32 +45,27 @@ def poisson(x, mu):
 # Reading the data and post-smoothing
 # =============================================================================
 
-path = 'C:\\Users\\wclaey6\\Data\\Noise Generator\\QCintevo_WC\\SUV\\'
-name = '20'
 
+path = "C:\\Wies Data\\Data for Python"
 
-
-# # Other parameters (more parameters can be set in each block of code)
-# units = "suv"         # units of the image data 
-
-# sm_fwhm_mm    = 0       # width of the Gaussian kernel used for post smoothing
-# radius        = 100     # known radius of the cylindrical phantom
+patient_name = "QCintevo_WC"
+patient_ID = "SUV"
+series_description = "Tomo_reduced_0_2"
 
 scale_factor = 1
-# =============================================================================
 
-# # reading data
-
-
-dcm_dir     = path + name
-# dcm         = pmf.DicomVolume(os.path.join(dcm_dir, '*')) # join multiple slices to a single volume
-# vol         = dcm.get_data() 
-# vol         = vol * scale_factor
-
-dcm_dir     = path + name
-dcm         = pd.dcmread(dcm_dir + "\\" + os.listdir(dcm_dir)[0])
+# looking for matching files
+database = create_database(path)
+s = lookup_series(database, series_description, patient_name=patient_name, patient_ID=patient_ID)
 
 
+# loading the first matching file
+full_path = path + "\\" + s['path2'].values[0]
+
+dcm_dir     = full_path
+dcm         = py.dcmread(dcm_dir + "\\" + os.listdir(dcm_dir)[0])
+
+# reading the required data
 vol         = dcm.pixel_array 
 vol         = vol * scale_factor
 
@@ -76,29 +73,42 @@ pixel_size = dcm.PixelSpacing[0]
 num_rows = dcm.Rows
 num_columns = dcm.Columns
 
+# splitting the photopeak and scatter windows
 PP = vol[0:120]
 LS = vol[120:240]
 
+
+#%% 
+
+# plotting the first frame
+
 plt.imshow(PP[1,:,:])
 plt.colorbar()
+plt.title(" Frame 1")
 plt.show()
 
+
+# plotting the x and y profiles
 x_profiles = np.sum(PP, axis = 1)
 y_profiles = np.sum(PP, axis = 2)
 xs = np.arange(256)
 
 for i in range(1):
     plt.plot(x_profiles[i,:])
+plt.title("x profile")
 plt.show()
 
 for i in range(1):
     plt.plot(y_profiles[i,:])
+plt.title("y profile")
 plt.show()
 
 # plt.hist(PP[1,:,:], bins = 35)
 # plt.show()
 
+# plot the theoretical (scatterles) profile
 plt.plot(xs, theoretical_profile2(xs, 128, 5, 0.01, 100))
+plt.title("Theoretical profile")
 plt.show()
 
 
@@ -127,6 +137,7 @@ y_centers = np.sum(PP * yy, axis = (1,2)) / np.sum(PP, axis = (1,2))
 plt.plot(x_centers, label = 'x')
 plt.plot(y_centers, label = 'y')
 plt.legend()
+plt.title("centers of mass for segmentation")
 plt.show()
 
 #%% ROI
@@ -157,7 +168,7 @@ plt.show()
 
 
 #%% spline fitting to y profile
-s = 200000
+s = 3000000000
 
 # tck = sp.interpolate.bisplrep(xx[100:200,100:200], yy[100:200,100:200], PP[0,100:200,100:200])
 
@@ -171,11 +182,12 @@ plt.plot(ys, y_profiles[0], label = 'data')
 plt.plot(ys, spline, label = 'spline')
 plt.legend()
 plt.xlim(-150,150)
+plt.title("Y profile fitting")
 plt.show()
 
 #%% spline fitting to x profile
 
-s = 70000
+s = 7000000000
 k = 3
 
 tck = sp.interpolate.splrep(xs, x_profiles[0], s = s, k = k)
@@ -188,6 +200,7 @@ plt.plot(xs, x_profiles[0], label = 'data')
 plt.plot(xs, spline, label = 'spline')
 plt.legend()
 plt.xlim(-150,150)
+plt.title("x profile fitting")
 plt.show()
 
 
